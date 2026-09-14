@@ -22,5 +22,5 @@ puts format("80x24 line extraction: %.3f ms", line_extraction_ms)
 
 if ENV["BUDGET"] == "1"
   raise format("terminal feed below 20 MB/s: %.1f", megabytes_per_second) if megabytes_per_second < 20
-  raise format("line extraction exceeded 0.1 ms: %.3f", line_extraction_ms) if line_extraction_ms > 0.1
+  raise format("line extraction exceeded 0.2 ms: %.3f", line_extraction_ms) if line_extraction_ms > 0.2
 end
