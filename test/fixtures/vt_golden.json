@@ -1,0 +1,47 @@
+[
+  {
+    "name": "streaming Unicode and scrollback",
+    "input": "日本é\r\nline2\r\nline3\r\nline4\r\nline5",
+    "chunk_size": 1,
+    "lines": ["line2", "line3", "line4", "line5"],
+    "cursor": [5, 3],
+    "scrollback": ["日本é"],
+    "history_widths": [[2, 0, 2, 0, 1]]
+  },
+  {
+    "name": "SGR indexed and true colors",
+    "input": "\u001b[1;3;4;91;48;5;123mA\u001b[38:2::12:34:56mB",
+    "lines": ["AB", "", "", ""],
+    "cursor": [2, 0],
+    "cells": [
+      {"row": 0, "column": 0, "text": "A", "width": 1, "foreground": 9, "background": 123,
+       "attributes": {"bold": true, "italic": true, "underline": 1}},
+      {"row": 0, "column": 1, "text": "B", "width": 1, "foreground": [12, 34, 56], "background": 123,
+       "attributes": {"bold": true, "italic": true, "underline": 1}}
+    ]
+  },
+  {
+    "name": "editing",
+    "input": "abcdef\u001b[1;3H\u001b[2P\u001b[2@XY",
+    "lines": ["abXYef", "", "", ""],
+    "cursor": [4, 0]
+  },
+  {
+    "name": "DEC graphics and tab",
+    "input": "\u001b(0lqk\u001b(B\t!",
+    "lines": ["┌─┐     !", "", "", ""],
+    "cursor": [9, 0]
+  },
+  {
+    "name": "OSC title cwd and hyperlink",
+    "input": "\u001b]8;;https://example.invalid\u001b\\link\u001b]8;;\u0007\u001b]7;file:///tmp/a%20b\u0007\u001b]2;日本語\u0007",
+    "lines": ["link", "", "", ""],
+    "cursor": [4, 0],
+    "title": "日本語",
+    "cwd": "/tmp/a b",
+    "cells": [
+      {"row": 0, "column": 0, "text": "l", "width": 1, "foreground": null, "background": null,
+       "attributes": {}, "hyperlink": "https://example.invalid"}
+    ]
+  }
+]
