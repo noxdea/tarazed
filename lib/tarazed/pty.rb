@@ -113,8 +113,12 @@ module Tarazed
 
     def signal(name = "INT")
       Process.kill(name, -pid)
-    rescue Errno::ESRCH
-      false
+    rescue Errno::ESRCH, Errno::EPERM
+      begin
+        Process.kill(name, pid)
+      rescue Errno::ESRCH, Errno::EPERM
+        false
+      end
     end
 
     def alive?

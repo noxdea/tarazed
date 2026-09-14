@@ -50,7 +50,7 @@ class PTYTest < Minitest::Test
     skip "uses the POSIX reader queue" if Gem.win_platform?
 
     size = 100_000
-    terminal = Tarazed::PTY.new(command: [RbConfig.ruby, "-e", "STDOUT.write('x' * #{size})"],
+    terminal = Tarazed::PTY.new(command: [RbConfig.ruby, "-e", "STDOUT.write(\"\\0\" * #{size})"],
       queue_limit_bytes: 65_536)
     total = 0
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
@@ -58,7 +58,7 @@ class PTYTest < Minitest::Test
       chunk = terminal.read(timeout: 0.05, max_bytes: 32_768, max_seconds: 0.004)
       break unless chunk
 
-      total += chunk.bytesize
+      total += chunk.count("\0")
       raise "PTY output timed out" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
     end
     assert_equal size, total
@@ -76,5 +76,20 @@ class PTYTest < Minitest::Test
     assert_raises(ArgumentError) { terminal.read(max_seconds: -1) }
   ensure
     terminal&.close
+  end
+
+  def test_signal_falls_back_to_the_child_when_its_process_group_is_unavailable
+    terminal = Tarazed::PTY.allocate
+    terminal.instance_variable_set(:@pid, 123)
+    targets = []
+    killer = lambda do |_name, target|
+      targets << target
+      raise Errno::EPERM if target.negative?
+
+      1
+    end
+
+    assert_equal 1, Process.stub(:kill, killer) { terminal.signal }
+    assert_equal [-123, 123], targets
   end
 end
