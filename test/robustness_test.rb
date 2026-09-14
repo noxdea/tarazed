@@ -47,4 +47,11 @@ class RobustnessTest < Minitest::Test
     assert_equal ["abcdefghij", "KLMNO"], grid.lines
     assert_equal [5, 1], [grid.cursor_x, grid.cursor_y]
   end
+
+  def test_invalid_osc_cwd_encoding_is_ignored
+    vt = Tarazed::VT.new
+    vt.feed("\e]7;file:///tmp/%\a")
+
+    assert_nil vt.cwd
+  end
 end

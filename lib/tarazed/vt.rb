@@ -425,7 +425,7 @@ module Tarazed
         _, url = payload.split(";", 2)
         grid.hyperlink = url.nil? || url.empty? ? nil : url.freeze
       end
-    rescue URI::InvalidURIError
+    rescue URI::InvalidURIError, ArgumentError
       nil
     end
 
