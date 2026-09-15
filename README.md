@@ -37,8 +37,26 @@ terminal.close
 ```
 
 ConPTY requires a supported 64-bit Windows release and does not fall back to a
-pipe-only console. Shell integration and the higher-level `Screen`, `Parser`,
-and `Session` APIs remain future work.
+pipe-only console.
+
+`Tarazed::Session` adds a pump-oriented API and bounded OSC 133 command
+history. Command rows and output ranges use stable absolute history rows, and
+OSC 7 updates the session working directory:
+
+```ruby
+session = Tarazed::Session.new(command: ["/bin/bash"], columns: 80, rows: 24)
+session.pump(timeout: 0.05)
+session.commands.each do |command|
+  puts "#{command.exit_status}: #{command.input} (#{command.cwd})"
+end
+session.close
+```
+
+Shell integration snippets for bash, zsh, and fish are packaged with the gem.
+An embedding application can inject one into a new interactive shell with
+`Tarazed::ShellIntegration.read(:bash)` (or `:zsh` / `:fish`). The snippets
+emit prompt, input, execution, and completion markers without changing the
+visible prompt.
 
 ## Development
 

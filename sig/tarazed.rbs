@@ -8,6 +8,24 @@ module Tarazed
   type attributes = Hash[Symbol, bool | Integer | [Integer, Integer, Integer]]
   type mouse_action = :press | :move | :release
 
+  class Command
+    attr_reader id: Integer
+    attr_reader prompt_row: Integer
+    attr_reader input: String
+    attr_reader output_range: Range[Integer]?
+    attr_reader exit_status: Integer
+    attr_reader started_at: Time?
+    attr_reader finished_at: Time
+    attr_reader cwd: String?
+
+    def self.new: (Integer id, Integer prompt_row, String input, Range[Integer]? output_range, Integer exit_status,
+      Time? started_at, Time finished_at, String? cwd) -> instance
+                | (id: Integer, prompt_row: Integer, input: String, output_range: Range[Integer]?,
+      exit_status: Integer, started_at: Time?, finished_at: Time, cwd: String?) -> instance
+    def with: (?id: Integer, ?prompt_row: Integer, ?input: String, ?output_range: Range[Integer]?,
+      ?exit_status: Integer, ?started_at: Time?, ?finished_at: Time, ?cwd: String?) -> Command
+  end
+
   class Cell < Struct[untyped]
     attr_accessor text: String
     attr_accessor width: Integer
@@ -24,6 +42,7 @@ module Tarazed
     include Enumerable[Array[Cell]]
 
     attr_reader limit: Integer
+    attr_reader total: Integer
 
     def initialize: (Integer limit) -> void
     def clear: () -> Array[Array[Cell]]
@@ -33,6 +52,7 @@ module Tarazed
     def each: () -> Enumerator[Array[Cell], Array[Array[Cell]]]
             | () { (Array[Cell]) -> void } -> Array[Array[Cell]]
     def push: (Array[Cell] cells) -> Array[Array[Cell]]?
+    def advance: (Integer count) -> Integer
   end
 
   class Grid
@@ -60,6 +80,8 @@ module Tarazed
     def alternate?: () -> bool
     def lines: () -> Array[String]
     def text: () -> String
+    def history_row: () -> Integer
+    def wrap_pending?: () -> bool
     def put: (String char) -> void
     def put_ascii: (String text) -> void
     def self.width: (String char) -> Integer
@@ -101,7 +123,8 @@ module Tarazed
     attr_reader replies: Array[String]
     attr_reader bell_count: Integer
 
-    def initialize: (?Grid grid) ?{ (String) -> void } -> void
+    def initialize: (?Grid grid, ?command_limit: Integer, ?on_command: ^(Command) -> untyped) ?{ (String) -> void } -> void
+    def commands: () -> Array[Command]
     def feed: (String bytes) -> self
     def paste: (String text) -> String
     def mouse: (button: Symbol | Integer | nil, column: Integer, row: Integer, ?action: mouse_action,
@@ -120,7 +143,8 @@ module Tarazed
     attr_reader command_name: String
 
     def initialize: (?command: String | Array[String], ?cwd: String, ?columns: Integer, ?rows: Integer,
-      ?env: Hash[String, String?], ?scrollback: Integer, ?queue_limit_bytes: Integer) -> void
+      ?env: Hash[String, String?], ?scrollback: Integer, ?queue_limit_bytes: Integer,
+      ?command_history_limit: Integer, ?on_command: ^(Command) -> untyped) -> void
     def read: (?timeout: Numeric, ?max_bytes: Integer, ?max_seconds: Numeric?) -> String?
     def pending?: () -> bool
     def write: (String bytes) -> Integer
@@ -134,6 +158,22 @@ module Tarazed
     def busy?: () -> bool
     def foreground_process_name: (?now: Numeric) -> String?
     def close: () -> self
+  end
+
+  class Session < PTY
+    def initialize: (command: String | Array[String], ?env: Hash[String, String?], ?cwd: String,
+      ?columns: Integer, ?rows: Integer, ?scrollback_limit: Integer, ?command_history_limit: Integer,
+      ?queue_limit_bytes: Integer, ?on_command: ^(Command) -> untyped) -> void
+    def screen: () -> Grid
+    def commands: () -> Array[Command]
+    def cwd: () -> String
+    def input: (String bytes) -> Integer
+    def pump: (?timeout: Numeric) -> bool
+  end
+
+  module ShellIntegration
+    def self.path: (String | Symbol shell) -> String
+    def self.read: (String | Symbol shell) -> String
   end
 
 end

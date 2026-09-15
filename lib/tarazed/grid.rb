@@ -33,6 +33,8 @@ module Tarazed
     def alternate? = !@alternate.nil?
     def lines = cells.map { |row| row.map(&:text).join.rstrip }
     def text = lines.join("\n")
+    def history_row = scrollback.total + cursor_y
+    def wrap_pending? = @wrap_pending
 
     def put(char)
       width = self.class.width(char)
@@ -45,6 +47,7 @@ module Tarazed
           width = [self.class.width(joined), columns].min
           if previous_x + width > columns && autowrap
             cells[cursor_y][previous_x] = blank
+            mark_wrapped(cells[cursor_y])
             carriage_return
             linefeed
             return put(joined)
@@ -66,6 +69,7 @@ module Tarazed
       width = 1 if width > columns
       if @wrap_pending || (width == 2 && cursor_x == columns - 1)
         if autowrap
+          mark_wrapped(cells[cursor_y])
           @cursor_x = 0
           linefeed
         elsif width == 2
@@ -104,6 +108,8 @@ module Tarazed
           end
           row.concat(Array.new(columns - row.length) { blank })
         end
+        @cells.each_with_index { |row, index| mark_wrapped(row) if index < @cells.length - 1 }
+        scrollback.advance(complete_rows - retained_complete_rows)
         @cursor_x = remainder.zero? ? columns - 1 : remainder
         @cursor_y = rows - 1
         @wrap_pending = remainder.zero?
@@ -283,10 +289,11 @@ module Tarazed
       validate_dimensions(columns, rows)
       previous_columns = @columns
       @columns, @rows = columns, rows
+      primary = alternate? ? @alternate : cells
       [cells, @alternate].compact.each do |screen|
         while screen.length > rows
           removed = screen.shift
-          scrollback.push(removed) unless alternate?
+          scrollback.push(removed) if screen.equal?(primary)
           @cursor_y -= 1 if screen.equal?(cells)
         end
         screen << blank_row while screen.length < rows
@@ -307,13 +314,17 @@ module Tarazed
     def selection(start, finish, history: false)
       source = history ? scrollback.to_a + cells : cells
       start, finish = finish, start if ([start[1], start[0]] <=> [finish[1], finish[0]]) == 1
-      (start[1]..finish[1]).map do |row|
-        next "" unless source[row]
+      parts = (start[1]..finish[1]).map do |row|
+        next ["", false] unless source[row]
 
         first = row == start[1] ? start[0] : 0
         last = row == finish[1] ? finish[0] : columns
-        source[row][first...last].to_a.map(&:text).join.rstrip
-      end.join("\n")
+        [source[row][first...last].to_a.map(&:text).join.rstrip, source[row].instance_variable_get(:@wrapped)]
+      end
+      parts.each_with_index.each_with_object(+"") do |((part, _), index), text|
+        text << "\n" if index.positive? && !parts[index - 1][1]
+        text << part
+      end
     end
 
     def links(row)
@@ -359,6 +370,7 @@ module Tarazed
 
     def blank = Cell.new(text: " ", width: 1, foreground: foreground, background: background, attributes: {}.freeze)
     def blank_row = Array.new(columns) { blank }
+    def mark_wrapped(row) = row.instance_variable_set(:@wrapped, true)
 
     def clear_wide(row, column)
       return unless column.between?(0, columns - 1)

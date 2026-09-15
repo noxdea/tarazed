@@ -19,7 +19,7 @@ Gem::Specification.new do |spec|
     "rubygems_mfa_required" => "true"
   }
   spec.files = Dir.chdir(__dir__) do
-    Dir["{lib,sig,docs}/**/*", "README.md", "CHANGELOG.md", "LICENSE.txt"].select { |path| File.file?(path) }
+    Dir["{lib,sig,docs,assets}/**/*", "README.md", "CHANGELOG.md", "LICENSE.txt"].select { |path| File.file?(path) }
   end
   spec.require_paths = ["lib"]
   spec.add_dependency "fiddle", "~> 1.1"

@@ -8,7 +8,7 @@ module Tarazed
     attr_reader :reader, :writer, :pid, :grid, :vt, :status, :initial_cwd, :command_name
 
     def initialize(command: ENV.fetch("SHELL", "/bin/sh"), cwd: Dir.pwd, columns: 80, rows: 24, env: {},
-      scrollback: 10_000, queue_limit_bytes: 8_388_608)
+      scrollback: 10_000, queue_limit_bytes: 8_388_608, command_history_limit: 1_000, on_command: nil)
       unless queue_limit_bytes.is_a?(Integer) && queue_limit_bytes.positive?
         raise ArgumentError, "terminal queue limit must be a positive integer"
       end
@@ -21,7 +21,7 @@ module Tarazed
         command = nil if command == "/bin/sh"
         @native = Windows::ConPTY.new(command: command, cwd: cwd, columns: columns, rows: rows, env: env)
         @pid = @native.pid
-        @vt = VT.new(grid) { |bytes| write(bytes) }
+        @vt = VT.new(grid, command_limit: command_history_limit, on_command: on_command) { |bytes| write(bytes) }
         return
       end
 
@@ -34,7 +34,7 @@ module Tarazed
       @reader.binmode
       @writer.binmode
       @writer.sync = true
-      @vt = VT.new(grid) { |bytes| write(bytes) }
+      @vt = VT.new(grid, command_limit: command_history_limit, on_command: on_command) { |bytes| write(bytes) }
       resize(columns: columns, rows: rows)
       @queue, @queue_bytes, @queue_limit_bytes = [], 0, queue_limit_bytes
       @queue_lock, @queue_ready = Mutex.new, ConditionVariable.new

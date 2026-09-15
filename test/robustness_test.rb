@@ -46,6 +46,7 @@ class RobustnessTest < Minitest::Test
 
     assert_equal ["abcdefghij", "KLMNO"], grid.lines
     assert_equal [5, 1], [grid.cursor_x, grid.cursor_y]
+    assert_equal 2, grid.history_row
   end
 
   def test_invalid_osc_cwd_encoding_is_ignored

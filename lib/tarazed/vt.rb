@@ -11,9 +11,17 @@ module Tarazed
 
     attr_reader :grid, :title, :cwd, :modes, :replies, :bell_count
 
-    def initialize(grid = Grid.new, &reply)
+    def initialize(grid = Grid.new, command_limit: 1_000, on_command: nil, &reply)
+      unless command_limit.is_a?(Integer) && command_limit >= 0
+        raise ArgumentError, "command history limit must be a nonnegative integer"
+      end
+
       @grid = grid
       @reply = reply
+      @on_command = on_command
+      @command_limit = command_limit
+      @commands = []
+      @next_command_id = 1
       @replies = []
       @input = +"".b
       @state = :ground
@@ -23,6 +31,8 @@ module Tarazed
       @charset = 0
       @bell_count = 0
     end
+
+    def commands = @commands.dup.freeze
 
     # The parser retains incomplete UTF-8 and control sequences between reads.
     def feed(bytes)
@@ -413,20 +423,99 @@ module Tarazed
     end
 
     def osc(sequence)
-      command, payload = sequence.force_encoding(Encoding::UTF_8).scrub.split(";", 2)
+      text = sequence.dup.force_encoding(Encoding::UTF_8)
+      valid_utf8 = text.valid_encoding?
+      command, payload = text.scrub.split(";", 2)
       return unless payload
 
       case command
       when "0", "2" then @title = payload
-      when "7"
-        uri = URI.parse(payload)
-        @cwd = URI.decode_uri_component(uri.path) if uri.scheme == "file" && uri.path&.start_with?("/")
+      when "7" then update_cwd(payload) if valid_utf8
       when "8"
         _, url = payload.split(";", 2)
         grid.hyperlink = url.nil? || url.empty? ? nil : url.freeze
+      when "133" then shell_marker(payload)
       end
-    rescue URI::InvalidURIError, ArgumentError
+    end
+
+    def update_cwd(payload)
+      match = /\Afile:\/\/([A-Za-z0-9._~%\-:\[\]]*)(\/.*)\z/.match(payload)
+      return unless match
+
+      path = URI.decode_uri_component(match[2])
+      return unless path.valid_encoding? && !path.match?(/[\x00-\x1f\x7f]/)
+
+      if Gem.win_platform?
+        drive_path = /\A\/[A-Za-z]:\//.match?(path)
+        path = path.delete_prefix("/") if drive_path
+        path = "//#{match[1]}#{path}" if !drive_path && !match[1].empty?
+      end
+      @cwd = path.freeze
+    rescue ArgumentError
       nil
+    end
+
+    def shell_marker(payload)
+      case payload
+      when "A"
+        @pending_command = {id: @next_command_id, prompt_row: grid.history_row}
+        @next_command_id += 1
+      when "B"
+        if @pending_command && !@pending_command[:started_at]
+          @pending_command[:input_start] ||= grid.wrap_pending? ? [0, grid.history_row + 1] :
+            [grid.cursor_x, grid.history_row]
+        end
+      when "C"
+        start_command if @pending_command && !@pending_command[:started_at]
+      else
+        finish_command(payload.delete_prefix("D;")) if @pending_command && payload.start_with?("D;")
+      end
+    end
+
+    def start_command
+      @pending_command[:input] = command_input(@pending_command[:input_start])
+      @pending_command[:output_start] = grid.history_row
+      @pending_command[:started_at] = Time.now.freeze
+      @pending_command[:cwd] = cwd&.dup&.freeze
+    end
+
+    def finish_command(value)
+      return unless @pending_command[:started_at]
+      return unless /\A\d{1,10}\z/.match?(value)
+
+      status = value.to_i
+      return if status > 0xffffffff
+
+      pending = @pending_command
+      finished_at = Time.now.freeze
+      output_range = pending[:output_start] && (pending[:output_start]..grid.history_row).freeze
+      command = Command.new(id: pending[:id], prompt_row: pending[:prompt_row], input: (pending[:input] || "").freeze,
+        output_range: output_range, exit_status: status, started_at: pending[:started_at], finished_at: finished_at,
+        cwd: pending[:cwd] || cwd)
+      @pending_command = nil
+      @commands.shift if @commands.length == @command_limit && @command_limit.positive?
+      @commands << command if @command_limit.positive?
+      @on_command&.call(command)
+    end
+
+    def command_input(start)
+      return "" unless start
+      return "" if start[1] > grid.history_row
+
+      base = grid.scrollback.total - grid.scrollback.length
+      first = [start[1] - base, 0].max
+      last = grid.history_row - base
+      return "" if last.negative?
+
+      finish = grid.wrap_pending? ? grid.columns : grid.cursor_x
+      first_column = start[1] < base ? 0 : start[0]
+      input = grid.selection([first_column, first], [finish, last], history: true).sub(/\n+\z/, "")
+      if input.bytesize > 65_536
+        # ponytail: terminal cells are the source of truth; add explicit command metadata if 64 KiB commands matter.
+        input = input.byteslice(0, 65_536)
+        input = input.byteslice(0, input.bytesize - 1) until input.valid_encoding?
+      end
+      input
     end
 
     def dcs(sequence)

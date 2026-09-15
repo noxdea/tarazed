@@ -17,8 +17,8 @@ and Linux or a Fiddle-based ConPTY backend on 64-bit Windows. It depends
 directly on `unicode-display_width`; scrollback uses a bounded Array because
 the default 10,000-row limit does not justify a persistent tree dependency.
 
-Higher-level screen, parser, session, and shell integration APIs remain outside
-the extracted API.
+Higher-level screen and parser APIs remain outside the extracted API. Session
+and shell integration are deferred to ADR 002.
 
 ## Consequences
 
