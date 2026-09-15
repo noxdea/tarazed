@@ -147,6 +147,7 @@ module Tarazed
       def spawn(command, cwd, env, attributes)
         startup = "\0".b * 112
         startup[0, 4] = [112].pack("I")
+        startup[60, 4] = [0x100].pack("I") # STARTF_USESTDHANDLES
         startup[104, 8] = [attributes.to_i].pack("J")
         info = "\0".b * 24
         command ||= ENV.fetch("COMSPEC", "cmd.exe")

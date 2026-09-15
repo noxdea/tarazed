@@ -5,7 +5,8 @@ require_relative "../lib/tarazed/windows/conpty"
 
 class WindowsConPTYTest < Minitest::Test
   class Kernel
-    attr_reader :calls, :closed_handles, :written, :attribute_console, :command_line, :environment, :startup_attribute
+    attr_reader :calls, :closed_handles, :written, :attribute_console, :command_line, :environment, :startup_attribute,
+      :startup_flags
 
     def initialize(output: ["\e[31mok".b], create_process: true)
       @output = output
@@ -39,6 +40,7 @@ class WindowsConPTYTest < Minitest::Test
       when :CreateProcessW
         @command_line = decode(arguments[1])
         @environment = decode(arguments[6]) unless arguments[6] == 0
+        @startup_flags = arguments[8].byteslice(60, 4).unpack1("I")
         @startup_attribute = arguments[8].byteslice(104, 8).unpack1("J")
         arguments[9].replace([90, 91, 1_234, 2].pack("JJII"))
         @create_process ? 1 : 0
@@ -121,6 +123,7 @@ class WindowsConPTYTest < Minitest::Test
     terminal.instance_variable_get(:@reader).join
 
     assert_equal 50, kernel.attribute_console
+    assert_equal 0x100, kernel.startup_flags
     assert_operator kernel.startup_attribute, :>, 0
     assert_equal 'cmd.exe /c "echo a b"', kernel.command_line
     assert_includes kernel.environment, "TARAZED_CONPTY_TEST=yes\0"
