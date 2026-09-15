@@ -22,5 +22,6 @@ Gem::Specification.new do |spec|
     Dir["{lib,sig,docs}/**/*", "README.md", "CHANGELOG.md", "LICENSE.txt"].select { |path| File.file?(path) }
   end
   spec.require_paths = ["lib"]
+  spec.add_dependency "fiddle", "~> 1.1"
   spec.add_dependency "unicode-display_width", "~> 3.2"
 end

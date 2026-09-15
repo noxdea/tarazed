@@ -4,12 +4,6 @@ require_relative "test_helper"
 
 class PTYTest < Minitest::Test
   def test_real_process_input_resize_and_cleanup
-    if Gem.win_platform?
-      error = assert_raises(Tarazed::Error) { Tarazed::PTY.new(command: "cmd.exe", columns: 40, rows: 8) }
-      assert_match(/unsupported/, error.message)
-      return
-    end
-
     child = <<~'RUBY'
       require "io/console"
       STDIN.binmode
@@ -67,9 +61,9 @@ class PTYTest < Minitest::Test
   end
 
   def test_validates_read_and_queue_limits
-    skip "PTY is unavailable on Windows" if Gem.win_platform?
-
     assert_raises(ArgumentError) { Tarazed::PTY.new(command: [RbConfig.ruby, "-e", ""], queue_limit_bytes: 0) }
+    skip "uses a POSIX child command" if Gem.win_platform?
+
     terminal = Tarazed::PTY.new(command: [RbConfig.ruby, "-e", "sleep 0.1"])
     assert_raises(ArgumentError) { terminal.read(max_bytes: 0) }
     assert_raises(ArgumentError) { terminal.read(timeout: -1) }

@@ -1,8 +1,8 @@
 # Tarazed
 
-Tarazed is a pure Ruby terminal emulator core. Version 0.1 provides the
+Tarazed is a pure Ruby terminal emulator core. It provides the
 terminal cell grid, scrollback, VT parser, keyboard/mouse encoding, and a
-POSIX PTY session without depending on an editor or UI toolkit.
+POSIX or Windows ConPTY session without depending on an editor or UI toolkit.
 
 ## Installation
 
@@ -26,8 +26,8 @@ terminal.feed("\e[32mready\e[0m\r\n")
 puts screen.text
 ```
 
-On POSIX systems, `Tarazed::PTY` owns a child process and feeds its output into
-the same grid:
+`Tarazed::PTY` owns a child process and feeds its output into the same grid.
+It uses a POSIX PTY on macOS and Linux and ConPTY on 64-bit Windows:
 
 ```ruby
 terminal = Tarazed::PTY.new(command: ["/bin/sh"], columns: 80, rows: 24)
@@ -36,10 +36,9 @@ terminal.read(timeout: 0.1)
 terminal.close
 ```
 
-Windows ConPTY, shell integration, and the higher-level `Screen`, `Parser`,
-and `Session` APIs are planned for 0.2. Version 0.1 raises `Tarazed::Error`
-when `PTY` is constructed on Windows; `Cell`, `Scrollback`, `Grid`, and `VT`
-are portable.
+ConPTY requires a supported 64-bit Windows release and does not fall back to a
+pipe-only console. Shell integration and the higher-level `Screen`, `Parser`,
+and `Session` APIs remain future work.
 
 ## Development
 

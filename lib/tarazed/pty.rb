@@ -12,11 +12,19 @@ module Tarazed
       unless queue_limit_bytes.is_a?(Integer) && queue_limit_bytes.positive?
         raise ArgumentError, "terminal queue limit must be a positive integer"
       end
-      raise Error, "PTY is unsupported on Windows in Tarazed 0.1" if Gem.win_platform?
 
       @initial_cwd = File.expand_path(cwd)
       @command_name = File.basename(Array(command).first.to_s)
       @grid = Grid.new(columns: columns, rows: rows, scrollback: scrollback)
+      if Gem.win_platform?
+        require_relative "windows/conpty"
+        command = nil if command == "/bin/sh"
+        @native = Windows::ConPTY.new(command: command, cwd: cwd, columns: columns, rows: rows, env: env)
+        @pid = @native.pid
+        @vt = VT.new(grid) { |bytes| write(bytes) }
+        return
+      end
+
       require "pty"
       arguments = command.is_a?(Array) ? command : Shellwords.split(command)
       raise ArgumentError, "terminal command required" if arguments.empty?
@@ -43,6 +51,11 @@ module Tarazed
         raise ArgumentError, "terminal parse budget must be nonnegative"
       end
       return nil if @eof
+      if @native
+        data = @native.read_available(limit: max_bytes)
+        data ? vt.feed(data) : @eof = true
+        return data
+      end
 
       deadline = max_seconds && Process.clock_gettime(Process::CLOCK_MONOTONIC) + max_seconds
       data = +"".b
@@ -74,8 +87,8 @@ module Tarazed
       @eof && data.empty? ? nil : data
     end
 
-    def pending? = @queue_lock.synchronize { !@queue.empty? }
-    def write(bytes) = writer.write(bytes)
+    def pending? = @native ? @native.pending? : @queue_lock.synchronize { !@queue.empty? }
+    def write(bytes) = @native ? @native.write(bytes) : writer.write(bytes)
     def paste(text) = write(vt.paste(text))
     def key(name, **modifiers) = write(vt.key(name, **modifiers))
     def mouse(**event) = write(vt.mouse(**event))
@@ -85,13 +98,13 @@ module Tarazed
       return self if @pty_size == dimensions
 
       grid.resize(columns: columns, rows: rows) unless grid.columns == columns && grid.rows == rows
-      reader.winsize = [rows, columns]
+      @native ? @native.resize(columns, rows) : reader.winsize = [rows, columns]
       @pty_size = dimensions
       self
     end
 
     def busy?
-      alive? && reader.tcgetpgrp != pid
+      !@native && alive? && reader.tcgetpgrp != pid
     rescue IOError, SystemCallError, NoMethodError
       false
     end
@@ -100,7 +113,7 @@ module Tarazed
       return @foreground_name if @foreground_checked && now - @foreground_checked < 1
 
       @foreground_checked = now
-      group = reader.tcgetpgrp
+      group = reader.tcgetpgrp unless @native
       value = if group && group != pid && File.file?("/proc/#{group}/comm")
         File.read("/proc/#{group}/comm")
       elsif group && group != pid
@@ -112,6 +125,12 @@ module Tarazed
     end
 
     def signal(name = "INT")
+      return @native.write("\x03") if @native && name == "INT"
+      if @native
+        @native.close
+        return false
+      end
+
       Process.kill(name, -pid)
     rescue Errno::ESRCH, Errno::EPERM
       begin
@@ -122,6 +141,7 @@ module Tarazed
     end
 
     def alive?
+      return @native.alive? if @native
       return false if @status
 
       result = Process.waitpid2(pid, Process::WNOHANG)
@@ -132,6 +152,12 @@ module Tarazed
     end
 
     def close
+      if @native
+        @native.close
+        @eof = true
+        return self
+      end
+
       @closing = true
       @queue_lock.synchronize { @queue_ready.broadcast }
       signal("HUP") if alive?

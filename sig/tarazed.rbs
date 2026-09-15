@@ -110,8 +110,8 @@ module Tarazed
   end
 
   class PTY
-    attr_reader reader: IO
-    attr_reader writer: IO
+    attr_reader reader: IO?
+    attr_reader writer: IO?
     attr_reader pid: Integer
     attr_reader grid: Grid
     attr_reader vt: VT
@@ -135,4 +135,5 @@ module Tarazed
     def foreground_process_name: (?now: Numeric) -> String?
     def close: () -> self
   end
+
 end
