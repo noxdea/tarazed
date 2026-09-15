@@ -12,7 +12,7 @@ class ShellIntegrationTest < Minitest::Test
       command_sequence("false", "two", 1) + command_sequence("true", "three", 0)
     bytes.bytes.each { |byte| vt.feed(byte.chr) }
 
-    assert_equal "/tmp/a b", vt.cwd
+    assert_equal Gem.win_platform? ? "//host/tmp/a b" : "/tmp/a b", vt.cwd
     assert_equal [2, 3], vt.commands.map(&:id)
     assert_equal ["false", "true"], vt.commands.map(&:input)
     assert_equal [1, 0], vt.commands.map(&:exit_status)
