@@ -34,7 +34,7 @@ class WindowsConPTYTest < Minitest::Test
         arguments[3].replace([64].pack("J")) if arguments[0] == 0
         arguments[0] == 0 ? 0 : 1
       when :UpdateProcThreadAttribute
-        @attribute_console = arguments[3].unpack1("J")
+        @attribute_console = arguments[3]
         1
       when :CreateProcessW
         @command_line = decode(arguments[1])

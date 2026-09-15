@@ -37,7 +37,7 @@ module Tarazed
           coordinate(columns, rows), input_read, output_write, 0, console
         ))
         @console = console.unpack1("J")
-        attributes = process_attributes(console)
+        attributes = process_attributes(@console)
         @process, @pid = spawn(command, cwd, env, attributes)
         start_reader
       rescue Fiddle::DLError, LoadError => error
