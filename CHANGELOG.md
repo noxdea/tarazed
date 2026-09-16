@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-09-17
+
+- Drain final Windows ConPTY output to EOF after the primary process exits without racing resize or close.
+
 ## 0.2.1 - 2026-09-16
 
 - Report and cache natural Windows ConPTY process exit status through the cross-platform `PTY#status` API.

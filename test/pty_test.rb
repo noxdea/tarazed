@@ -60,6 +60,29 @@ class PTYTest < Minitest::Test
     terminal&.close
   end
 
+  def test_windows_real_process_output_reaches_eof_after_natural_exit
+    skip "uses the Windows ConPTY backend" unless Gem.win_platform?
+
+    payload = "x" * 32_768 + "EOF"
+    child = "STDOUT.binmode; STDOUT.write('x' * 32768); STDOUT.write('EOF')"
+    terminal = Tarazed::PTY.new(command: [RbConfig.ruby, "-e", child])
+    output = +"".b
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+    loop do
+      chunk = terminal.read(max_bytes: 4_096, max_seconds: 0.004)
+      break unless chunk
+
+      output << chunk
+      raise "ConPTY output did not reach EOF" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      sleep 0.001 if chunk.empty?
+    end
+
+    assert_includes output, payload
+    refute terminal.alive?
+  ensure
+    terminal&.close
+  end
+
   def test_validates_read_and_queue_limits
     assert_raises(ArgumentError) { Tarazed::PTY.new(command: [RbConfig.ruby, "-e", ""], queue_limit_bytes: 0) }
     skip "uses a POSIX child command" if Gem.win_platform?

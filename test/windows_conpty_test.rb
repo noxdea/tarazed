@@ -6,15 +6,25 @@ require_relative "../lib/tarazed/windows/conpty"
 class WindowsConPTYTest < Minitest::Test
   class Kernel
     attr_reader :calls, :closed_handles, :written, :attribute_console, :command_line, :environment, :startup_attribute,
-      :startup_flags
+      :startup_flags, :close_started, :resize_started
 
-    def initialize(output: ["\e[31mok".b], create_process: true, exit_code: 259, exit_code_success: true)
-      @output = output
+    def initialize(output: ["\e[31mok".b], create_process: true, exit_code: 259, exit_code_success: true,
+      close_release: nil, resize_release: nil, wait_timeouts: 1)
+      @output = output.dup
       @create_process = create_process
       @exit_code = exit_code
       @exit_code_success = exit_code_success
       @calls, @closed_handles, @written = [], [], +"".b
+      @process_exited, @close_started, @resize_started = Queue.new, Queue.new, Queue.new
+      @close_lock, @close_ready, @close_release = Mutex.new, ConditionVariable.new, close_release
+      @resize_release, @wait_timeouts = resize_release, wait_timeouts
+      @process_exited << true unless exit_code == 259
       @next_handle = 10
+    end
+
+    def exit!(code = 0)
+      @exit_code = code
+      @process_exited << true
     end
 
     def fn(name, _arguments, _result, need_gvl: true)
@@ -47,7 +57,13 @@ class WindowsConPTYTest < Minitest::Test
         arguments[9].replace([90, 91, 1_234, 2].pack("JJII"))
         @create_process ? 1 : 0
       when :ReadFile
-        bytes = @output.shift
+        bytes = @close_lock.synchronize do
+          if @output.first == :after_close
+            @close_ready.wait(@close_lock) until @console_closed
+            @output.shift
+          end
+          @output.shift
+        end
         return 0 unless bytes
 
         arguments[1][0, bytes.bytesize] = bytes
@@ -60,8 +76,27 @@ class WindowsConPTYTest < Minitest::Test
       when :GetExitCodeProcess
         arguments[1].replace([@exit_code].pack("I"))
         @exit_code_success ? 1 : 0
-      when :ResizePseudoConsole then 0
-      when :ClosePseudoConsole then @console_closed = true; nil
+      when :WaitForSingleObject
+        if @wait_timeouts.positive?
+          @wait_timeouts -= 1
+          258
+        else
+          @process_exited.pop
+          0
+        end
+      when :ResizePseudoConsole
+        @resize_started << true
+        @resize_release&.pop
+        0
+      when :ClosePseudoConsole
+        @close_lock.synchronize do
+          @console_closed = true
+          @close_ready.broadcast
+        end
+        @process_exited << true
+        @close_started << true
+        @close_release&.pop
+        nil
       when :CloseHandle then @closed_handles << arguments[0]; 1
       when :DeleteProcThreadAttributeList then nil
       else raise "unexpected native call: #{name}"
@@ -173,6 +208,63 @@ class WindowsConPTYTest < Minitest::Test
     terminals&.each(&:close)
   end
 
+  def test_natural_exit_closes_once_while_the_reader_drains_final_output
+    release = Queue.new
+    kernel = Kernel.new(output: [:after_close, "late".b], exit_code: 0, close_release: release)
+    terminal = Tarazed::Windows::ConPTY.new(command: "cmd.exe", kernel: kernel)
+    wait_until { !kernel.close_started.empty? }
+    kernel.close_started.pop
+    closer = Thread.new { terminal.close }
+    wait_until { terminal.instance_variable_get(:@closed) }
+    release << true
+    assert closer.join(1), "close did not finish"
+
+    assert_equal "late", terminal.read_available
+    assert_nil terminal.read_available
+    assert_same terminal, terminal.close
+    assert_equal 1, kernel.calls.count { |name, _| name == :ClosePseudoConsole }
+    assert kernel.calls.any? { |name, gvl| name == :WaitForSingleObject && !gvl }
+  ensure
+    release << true if release
+    closer&.join(1)
+    terminal&.close
+  end
+
+  def test_resize_finishes_before_natural_release_and_is_ignored_afterward
+    resize_release = Queue.new
+    kernel = Kernel.new(resize_release: resize_release)
+    terminal = Tarazed::Windows::ConPTY.new(command: "cmd.exe", kernel: kernel)
+    resizer = Thread.new { terminal.resize(100, 30) }
+    wait_until { !kernel.resize_started.empty? }
+    kernel.resize_started.pop
+    kernel.exit!
+    resize_release << true
+    assert resizer.join(1), "resize did not finish"
+    wait_until { kernel.calls.any? { |name, _| name == :ClosePseudoConsole } }
+
+    assert_nil terminal.resize(120, 40)
+    assert_equal 1, kernel.calls.count { |name, _| name == :ResizePseudoConsole }
+  ensure
+    resize_release << true if resize_release
+    resizer&.join(1)
+    terminal&.close
+  end
+
+  def test_concurrent_close_wakes_a_waiting_watcher_and_owns_each_handle_once
+    kernel = Kernel.new
+    terminal = Tarazed::Windows::ConPTY.new(command: "cmd.exe", kernel: kernel)
+    wait_until { kernel.calls.count { |name, _| name == :WaitForSingleObject } >= 2 }
+    closers = 2.times.map { Thread.new { terminal.close } }
+    closers.each { |thread| assert thread.join(1), "close did not finish" }
+
+    assert_equal 1, kernel.calls.count { |name, _| name == :ClosePseudoConsole }
+    assert_equal [91, 10, 13, 11, 12, 90], kernel.closed_handles
+    assert_equal kernel.closed_handles, kernel.closed_handles.uniq
+  ensure
+    closers&.each { |thread| thread.join(1) }
+    terminal&.close
+  end
+
   def test_exit_status_api_failure_does_not_prevent_close
     kernel = Kernel.new(exit_code_success: false)
     terminal = Tarazed::Windows::ConPTY.new(command: "cmd.exe", kernel: kernel)
@@ -211,5 +303,15 @@ class WindowsConPTYTest < Minitest::Test
     assert_equal '"a b"', quote.call("a b")
     assert_equal '"a\\\\\\"b"', quote.call('a\\"b')
     assert_equal '"a b\\\\"', quote.call("a b\\")
+  end
+
+  private
+
+  def wait_until
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 1
+    until yield
+      flunk "condition was not met" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+      sleep 0.001
+    end
   end
 end

@@ -22,7 +22,10 @@ module Tarazed
       P, I, U, N, V = Fiddle::TYPE_VOIDP, Fiddle::TYPE_INT, Fiddle::TYPE_UINT, Fiddle::TYPE_SIZE_T,
         Fiddle::TYPE_VOID
       STILL_ACTIVE = 259
-      private_constant :P, :I, :U, :N, :V
+      WAIT_OBJECT_0 = 0
+      WAIT_TIMEOUT = 258
+      EXIT_POLL_MILLISECONDS = 10
+      private_constant :P, :I, :U, :N, :V, :WAIT_OBJECT_0, :WAIT_TIMEOUT, :EXIT_POLL_MILLISECONDS
 
       class Status
         attr_reader :exitstatus
@@ -41,6 +44,7 @@ module Tarazed
       attr_reader :pid
 
       def initialize(command: nil, columns: 80, rows: 24, cwd: nil, env: {}, kernel: nil)
+        @console_lock, @lifecycle_lock = Mutex.new, Mutex.new
         raise Error, "ConPTY requires 64-bit Windows Ruby" unless Fiddle::SIZEOF_VOIDP == 8
 
         @kernel = kernel || Library.new("kernel32.dll")
@@ -55,6 +59,7 @@ module Tarazed
         attributes = process_attributes(@console)
         @process, @pid = spawn(command, cwd, env, attributes)
         start_reader
+        start_exit_watcher
       rescue Fiddle::DLError, LoadError => error
         release
         raise Error, "ConPTY is unavailable: #{error.message}"
@@ -116,7 +121,12 @@ module Tarazed
       end
 
       def resize(columns, rows)
-        check_hresult(function(:ResizePseudoConsole, [P, I], I).call(@console, coordinate(columns, rows)))
+        size = coordinate(columns, rows)
+        @console_lock.synchronize do
+          return unless @console
+
+          check_hresult(function(:ResizePseudoConsole, [P, I], I).call(@console, size))
+        end
       end
 
       def status
@@ -127,17 +137,20 @@ module Tarazed
       def alive? = !@closed && !status
 
       def close
-        return self if @closed
+        @lifecycle_lock.synchronize do
+          return self if @closed
 
-        safely { refresh_status }
-        @closed = true
-        close_handle(@input_write)
-        @input_write = nil
-        close_console
-        @reader&.join(2)
-        close_handle(@output_read)
-        close_handle(@process)
-        @output_read = @process = nil
+          safely { refresh_status }
+          @closed = true
+          close_handle(@input_write)
+          @input_write = nil
+          close_console
+          @watcher&.join
+          @reader&.join(2)
+          close_handle(@output_read)
+          close_handle(@process)
+          @output_read = @process = nil
+        end
         self
       end
 
@@ -241,20 +254,43 @@ module Tarazed
         end
       end
 
-      def close_console
-        return unless @console
+      def start_exit_watcher
+        wait = function(:WaitForSingleObject, [P, U], U, need_gvl: false)
+        @watcher = Thread.new do
+          loop do
+            result = wait.call(@process, EXIT_POLL_MILLISECONDS)
+            break if @closed
+            if result == WAIT_OBJECT_0
+              close_console
+              break
+            end
+            raise SystemCallError.new("WaitForSingleObject", Fiddle.last_error) unless result == WAIT_TIMEOUT
+          end
+        end
+      end
 
-        function(:ClosePseudoConsole, [P], V, need_gvl: false).call(@console)
-        @console = nil
+      def close_console
+        console = @console_lock.synchronize do
+          value = @console
+          @console = nil
+          value
+        end
+        return unless console
+
+        function(:ClosePseudoConsole, [P], V, need_gvl: false).call(console)
       end
 
       def release
-        safely { close_handle(@input_write) }
-        safely { close_console }
-        @reader&.join(2)
-        safely { close_handle(@output_read) }
-        safely { close_handle(@process) }
-        @input_write = @output_read = @process = nil
+        @lifecycle_lock.synchronize do
+          @closed = true
+          safely { close_handle(@input_write) }
+          safely { close_console }
+          @watcher&.join
+          @reader&.join(2)
+          safely { close_handle(@output_read) }
+          safely { close_handle(@process) }
+          @input_write = @output_read = @process = nil
+        end
       end
 
       def safely
