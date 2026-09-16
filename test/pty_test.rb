@@ -63,8 +63,7 @@ class PTYTest < Minitest::Test
   def test_windows_real_process_output_reaches_eof_after_natural_exit
     skip "uses the Windows ConPTY backend" unless Gem.win_platform?
 
-    payload = "x" * 32_768 + "EOF"
-    child = "STDOUT.binmode; STDOUT.write('x' * 32768); STDOUT.write('EOF')"
+    child = "STDOUT.binmode; STDOUT.write('~' * 32768); STDOUT.write('EOF')"
     terminal = Tarazed::PTY.new(command: [RbConfig.ruby, "-e", child])
     output = +"".b
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
@@ -77,7 +76,8 @@ class PTYTest < Minitest::Test
       sleep 0.001 if chunk.empty?
     end
 
-    assert_includes output, payload
+    assert_equal 32_768, output.count("~")
+    assert_includes output, "EOF"
     refute terminal.alive?
   ensure
     terminal&.close
