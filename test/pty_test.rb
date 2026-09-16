@@ -65,19 +65,19 @@ class PTYTest < Minitest::Test
 
     child = "STDOUT.binmode; STDOUT.write('~' * 32768); STDOUT.write('EOF')"
     terminal = Tarazed::PTY.new(command: [RbConfig.ruby, "-e", child])
-    output = +"".b
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
     loop do
       chunk = terminal.read(max_bytes: 4_096, max_seconds: 0.004)
       break unless chunk
 
-      output << chunk
       raise "ConPTY output did not reach EOF" if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
       sleep 0.001 if chunk.empty?
     end
 
-    assert_equal 32_768, output.count("~")
-    assert_includes output, "EOF"
+    history_rows = terminal.grid.scrollback.length + terminal.grid.rows
+    rendered = terminal.grid.selection([0, 0], [terminal.grid.columns, history_rows - 1], history: true)
+    assert_equal 32_768, rendered.count("~")
+    assert_includes rendered, "EOF"
     refute terminal.alive?
   ensure
     terminal&.close
