@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-09-16
+
+- Report and cache natural Windows ConPTY process exit status through the cross-platform `PTY#status` API.
+
 ## 0.2.0 - 2026-09-16
 
 - Track OSC 133 command boundaries, input, output rows, exit status, and OSC 7 working directories in bounded history.

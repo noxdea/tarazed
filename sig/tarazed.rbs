@@ -132,13 +132,20 @@ module Tarazed
     def key: (String | Symbol name, ?shift: bool, ?alt: bool, ?control: bool) -> String
   end
 
+  interface _PTYStatus
+    def exited?: () -> bool
+    def exitstatus: () -> Integer?
+    def success?: () -> bool?
+    def termsig: () -> Integer?
+  end
+
   class PTY
     attr_reader reader: IO?
     attr_reader writer: IO?
     attr_reader pid: Integer
     attr_reader grid: Grid
     attr_reader vt: VT
-    attr_reader status: Process::Status?
+    attr_reader status: _PTYStatus?
     attr_reader initial_cwd: String
     attr_reader command_name: String
 

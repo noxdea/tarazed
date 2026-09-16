@@ -8,9 +8,11 @@ class WindowsConPTYTest < Minitest::Test
     attr_reader :calls, :closed_handles, :written, :attribute_console, :command_line, :environment, :startup_attribute,
       :startup_flags
 
-    def initialize(output: ["\e[31mok".b], create_process: true)
+    def initialize(output: ["\e[31mok".b], create_process: true, exit_code: 259, exit_code_success: true)
       @output = output
       @create_process = create_process
+      @exit_code = exit_code
+      @exit_code_success = exit_code_success
       @calls, @closed_handles, @written = [], [], +"".b
       @next_handle = 10
     end
@@ -55,7 +57,9 @@ class WindowsConPTYTest < Minitest::Test
         @written << arguments[1]
         arguments[3].replace([arguments[2]].pack("I"))
         1
-      when :WaitForSingleObject then @console_closed ? 0 : 258
+      when :GetExitCodeProcess
+        arguments[1].replace([@exit_code].pack("I"))
+        @exit_code_success ? 1 : 0
       when :ResizePseudoConsole then 0
       when :ClosePseudoConsole then @console_closed = true; nil
       when :CloseHandle then @closed_handles << arguments[0]; 1
@@ -75,6 +79,7 @@ class WindowsConPTYTest < Minitest::Test
 
   class Backend
     attr_reader :pid, :writes, :resizes, :closes
+    attr_accessor :status
 
     def initialize
       @pid, @writes, @resizes, @reads, @closes = 99, [], [], ["\e[32mready".b, nil], 0
@@ -84,7 +89,7 @@ class WindowsConPTYTest < Minitest::Test
     def pending? = !@reads.empty?
     def write(bytes) = (@writes << bytes; bytes.bytesize)
     def resize(columns, rows) = @resizes << [columns, rows]
-    def alive? = true
+    def alive? = !status
     def close = (@closes += 1; self)
   end
 
@@ -104,6 +109,11 @@ class WindowsConPTYTest < Minitest::Test
         assert_nil terminal.reader
         assert_equal "\e[32mready", terminal.read(max_bytes: 20)
         assert_includes terminal.grid.text, "ready"
+        status = Object.new
+        backend.status = status
+        assert_same status, terminal.status
+        refute terminal.alive?
+        backend.status = nil
         terminal.resize(columns: 50, rows: 10)
         terminal.key(:enter)
         terminal.signal
@@ -132,14 +142,45 @@ class WindowsConPTYTest < Minitest::Test
     assert_nil terminal.read_available
     assert_equal 3, terminal.write("abc")
     terminal.resize(100, 30)
+    assert_nil terminal.status
     assert terminal.alive?
     assert_same terminal, terminal.close
     refute terminal.alive?
+    assert_nil terminal.status
     assert_same terminal, terminal.close
     assert_equal "abc", kernel.written
     assert_equal [91, 10, 13, 11, 12, 90], kernel.closed_handles
     assert_equal 1, kernel.calls.count { |name, _| name == :ClosePseudoConsole }
     assert kernel.calls.any? { |name, gvl| name == :ReadFile && !gvl }
+  end
+
+  def test_natural_exit_status_is_process_status_compatible_and_cached
+    terminals = [0, 7].map do |exit_code|
+      kernel = Kernel.new(exit_code: exit_code)
+      terminal = Tarazed::Windows::ConPTY.new(command: "cmd.exe", kernel: kernel)
+      status = terminal.status
+
+      assert status.exited?
+      assert_equal exit_code, status.exitstatus
+      assert_equal exit_code.zero?, status.success?
+      assert_nil status.termsig
+      refute terminal.alive?
+      assert_same status, terminal.status
+      assert_equal 1, kernel.calls.count { |name, _| name == :GetExitCodeProcess }
+      terminal
+    end
+  ensure
+    terminals&.each(&:close)
+  end
+
+  def test_exit_status_api_failure_does_not_prevent_close
+    kernel = Kernel.new(exit_code_success: false)
+    terminal = Tarazed::Windows::ConPTY.new(command: "cmd.exe", kernel: kernel)
+
+    assert_raises(SystemCallError) { terminal.status }
+    assert_same terminal, terminal.close
+    assert_nil terminal.status
+    assert_equal [91, 10, 13, 11, 12, 90], kernel.closed_handles
   end
 
   def test_failed_process_creation_releases_every_owned_handle

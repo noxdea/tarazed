@@ -68,11 +68,13 @@ It uses a POSIX PTY on macOS and Linux and ConPTY on 64-bit Windows:
 terminal = Tarazed::PTY.new(command: ["/bin/sh"], columns: 80, rows: 24)
 terminal.write("printf 'hello\\n'\r")
 terminal.read(timeout: 0.1)
+puts terminal.status.exitstatus if !terminal.alive? && terminal.status
 terminal.close
 ```
 
 ConPTY requires a supported 64-bit Windows release and does not fall back to a
-pipe-only console.
+pipe-only console. After natural process exit, `status` provides `exited?`,
+`exitstatus`, `success?`, and `termsig` on every platform.
 
 ## Command History
 

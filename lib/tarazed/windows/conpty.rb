@@ -21,7 +21,22 @@ module Tarazed
     class ConPTY
       P, I, U, N, V = Fiddle::TYPE_VOIDP, Fiddle::TYPE_INT, Fiddle::TYPE_UINT, Fiddle::TYPE_SIZE_T,
         Fiddle::TYPE_VOID
+      STILL_ACTIVE = 259
       private_constant :P, :I, :U, :N, :V
+
+      class Status
+        attr_reader :exitstatus
+
+        def initialize(exitstatus)
+          @exitstatus = exitstatus
+          freeze
+        end
+
+        def exited? = true
+        def success? = exitstatus.zero?
+        def termsig = nil
+      end
+      private_constant :Status
 
       attr_reader :pid
 
@@ -104,13 +119,17 @@ module Tarazed
         check_hresult(function(:ResizePseudoConsole, [P, I], I).call(@console, coordinate(columns, rows)))
       end
 
-      def alive?
-        !@closed && function(:WaitForSingleObject, [P, U], U).call(@process, 0) == 258
+      def status
+        refresh_status unless @closed
+        @status
       end
+
+      def alive? = !@closed && !status
 
       def close
         return self if @closed
 
+        safely { refresh_status }
         @closed = true
         close_handle(@input_write)
         @input_write = nil
@@ -126,6 +145,15 @@ module Tarazed
 
       def function(name, arguments, result, need_gvl: true)
         @kernel.fn(name, arguments, result, need_gvl: need_gvl)
+      end
+
+      def refresh_status
+        return @status if @status
+
+        code = [0].pack("I")
+        check(function(:GetExitCodeProcess, [P, P], I).call(@process, code), "GetExitCodeProcess")
+        value = code.unpack1("I")
+        @status = Status.new(value) unless value == STILL_ACTIVE
       end
 
       def process_attributes(console)

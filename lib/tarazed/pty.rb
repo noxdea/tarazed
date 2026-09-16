@@ -5,7 +5,7 @@ require "shellwords"
 
 module Tarazed
   class PTY
-    attr_reader :reader, :writer, :pid, :grid, :vt, :status, :initial_cwd, :command_name
+    attr_reader :reader, :writer, :pid, :grid, :vt, :initial_cwd, :command_name
 
     def initialize(command: ENV.fetch("SHELL", "/bin/sh"), cwd: Dir.pwd, columns: 80, rows: 24, env: {},
       scrollback: 10_000, queue_limit_bytes: 8_388_608, command_history_limit: 1_000, on_command: nil)
@@ -123,6 +123,8 @@ module Tarazed
     rescue IOError, SystemCallError, NoMethodError
       @foreground_name = nil
     end
+
+    def status = @native ? @native.status : @status
 
     def signal(name = "INT")
       return @native.write("\x03") if @native && name == "INT"
