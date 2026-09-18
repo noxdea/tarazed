@@ -14,7 +14,16 @@ module Tarazed
       end
 
       @initial_cwd = File.expand_path(cwd)
-      @command_name = File.basename(Array(command).first.to_s)
+      executable = if command.is_a?(Array)
+        command.first
+      elsif Gem.win_platform?
+        value = command.to_s.lstrip
+        value.start_with?('"') ? value[/\A"([^"]*)"/, 1] : value.split(/\s/, 2).first
+      else
+        Shellwords.split(command.to_s).first
+      end
+      executable = executable.to_s.tr("\\", "/") if Gem.win_platform?
+      @command_name = File.basename(executable.to_s)
       @grid = Grid.new(columns: columns, rows: rows, scrollback: scrollback)
       if Gem.win_platform?
         require_relative "windows/conpty"

@@ -95,6 +95,17 @@ class PTYTest < Minitest::Test
     terminal&.close
   end
 
+  def test_command_name_excludes_string_arguments
+    skip "uses a POSIX child command" if Gem.win_platform?
+
+    command = "#{Shellwords.escape(RbConfig.ruby)} -e #{Shellwords.escape('sleep 0.1')}"
+    terminal = Tarazed::PTY.new(command: command)
+
+    assert_equal File.basename(RbConfig.ruby), terminal.command_name
+  ensure
+    terminal&.close
+  end
+
   def test_signal_falls_back_to_the_child_when_its_process_group_is_unavailable
     terminal = Tarazed::PTY.allocate
     terminal.instance_variable_set(:@pid, 123)

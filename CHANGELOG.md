@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report the executable basename from string commands that include arguments.
+
 ## 0.2.2 - 2026-09-17
 
 - Drain final Windows ConPTY output to EOF after the primary process exits without racing resize or close.

@@ -120,6 +120,7 @@ class ShellIntegrationTest < Minitest::Test
       assert_includes File.binread(path), "133;D"
       assert_includes File.binread(path), "\\e]7;file://"
     end
+    assert_equal Tarazed::ShellIntegration.path("bash"), Tarazed::ShellIntegration.path("BASH.EXE")
     assert_raises(ArgumentError) { Tarazed::ShellIntegration.path("sh") }
   end
 

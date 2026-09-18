@@ -161,6 +161,21 @@ class WindowsConPTYTest < Minitest::Test
     end
   end
 
+  def test_facade_extracts_a_quoted_windows_executable_name_without_losing_backslashes
+    backend = Backend.new
+    terminal = nil
+
+    Gem.stub(:win_platform?, true) do
+      Tarazed::Windows::ConPTY.stub(:new, backend) do
+        terminal = Tarazed::PTY.new(command: '"C:\\Program Files\\Git\\bin\\bash.exe" --login')
+
+        assert_equal "bash.exe", terminal.command_name
+      end
+    end
+  ensure
+    terminal&.close
+  end
+
   def test_native_boundary_passes_console_pointer_and_releases_resources
     kernel = Kernel.new
     terminal = Tarazed::Windows::ConPTY.new(command: ["cmd.exe", "/c", "echo a b"], columns: 80, rows: 24,

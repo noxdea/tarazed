@@ -8,7 +8,7 @@ module Tarazed
     module_function
 
     def path(shell)
-      name = File.basename(shell.to_s).to_sym
+      name = File.basename(shell.to_s).downcase.delete_suffix(".exe").to_sym
       file = NAMES.fetch(name) { raise ArgumentError, "unsupported shell: #{shell}" }
       File.expand_path("../../assets/shell-integration/#{file}", __dir__)
     end
