@@ -174,7 +174,7 @@ module Tarazed
       ?queue_limit_bytes: Integer, ?on_command: ^(Command) -> untyped) -> void
     def screen: () -> Grid
     def commands: () -> Array[Command]
-    def clear_commands: () -> VT
+    def clear_commands: () -> self
     def cwd: () -> String
     def input: (String bytes) -> Integer
     def pump: (?timeout: Numeric) -> bool

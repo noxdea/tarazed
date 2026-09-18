@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.4 - 2026-09-18
+
+- Add an API to clear completed and in-progress command history.
+
 ## 0.2.3 - 2026-09-18
 
 - Report the executable basename from string commands that include arguments.
