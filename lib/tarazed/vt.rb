@@ -33,6 +33,11 @@ module Tarazed
     end
 
     def commands = @commands.dup.freeze
+    def clear_commands
+      @commands.clear
+      @pending_command = nil
+      self
+    end
 
     # The parser retains incomplete UTF-8 and control sequences between reads.
     def feed(bytes)

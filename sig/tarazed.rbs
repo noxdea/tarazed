@@ -125,6 +125,7 @@ module Tarazed
 
     def initialize: (?Grid grid, ?command_limit: Integer, ?on_command: ^(Command) -> untyped) ?{ (String) -> void } -> void
     def commands: () -> Array[Command]
+    def clear_commands: () -> self
     def feed: (String bytes) -> self
     def paste: (String text) -> String
     def mouse: (button: Symbol | Integer | nil, column: Integer, row: Integer, ?action: mouse_action,
@@ -173,6 +174,7 @@ module Tarazed
       ?queue_limit_bytes: Integer, ?on_command: ^(Command) -> untyped) -> void
     def screen: () -> Grid
     def commands: () -> Array[Command]
+    def clear_commands: () -> VT
     def cwd: () -> String
     def input: (String bytes) -> Integer
     def pump: (?timeout: Numeric) -> bool

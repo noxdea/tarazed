@@ -54,6 +54,17 @@ class ShellIntegrationTest < Minitest::Test
     assert_equal ["pwd"], completed.map(&:input)
   end
 
+  def test_clear_commands_discards_completed_and_pending_history
+    vt = Tarazed::VT.new
+    vt.feed(command_sequence("done", "output", 0))
+    vt.feed("\e]133;A\a$ \e]133;B\apending\e]133;C\a")
+
+    assert_same vt, vt.clear_commands
+    assert_empty vt.commands
+    vt.feed("\e]133;D;1\a")
+    assert_empty vt.commands
+  end
+
   def test_command_input_preserves_soft_wraps_and_utf8_cap
     exact = Tarazed::VT.new(Tarazed::Grid.new(columns: 2, rows: 2))
     exact.feed("\e]133;A\a>>\e]133;B\a\e]133;C\a\e]133;D;0\a")

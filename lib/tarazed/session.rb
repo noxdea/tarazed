@@ -10,6 +10,7 @@ module Tarazed
 
     def screen = grid
     def commands = vt.commands
+    def clear_commands = vt.clear_commands
     def cwd = vt.cwd || initial_cwd
     def input(bytes) = write(bytes)
 
