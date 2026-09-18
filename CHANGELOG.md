@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.3 - 2026-09-18
+
 - Report the executable basename from string commands that include arguments.
 
 ## 0.2.2 - 2026-09-17
