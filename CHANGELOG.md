@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.5 - 2026-09-19
+
+- Keep open Windows ConPTY reads non-EOF while waiting for output.
+
 ## 0.2.4 - 2026-09-18
 
 - Add an API to clear completed and in-progress command history.

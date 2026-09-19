@@ -204,6 +204,17 @@ class WindowsConPTYTest < Minitest::Test
     assert kernel.calls.any? { |name, gvl| name == :ReadFile && !gvl }
   end
 
+  def test_read_available_returns_empty_while_open_without_pending_output
+    terminal = Tarazed::Windows::ConPTY.allocate
+    terminal.instance_variable_set(:@output, Queue.new)
+    terminal.instance_variable_set(:@pending, +"".b)
+    terminal.instance_variable_set(:@eof, false)
+
+    assert_equal "".b, terminal.read_available
+    terminal.instance_variable_set(:@eof, true)
+    assert_nil terminal.read_available
+  end
+
   def test_natural_exit_status_is_process_status_compatible_and_cached
     terminals = [0, 7].map do |exit_code|
       kernel = Kernel.new(exit_code: exit_code)

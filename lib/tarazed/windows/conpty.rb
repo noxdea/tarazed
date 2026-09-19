@@ -97,7 +97,7 @@ module Tarazed
         end
         return nil if @pending.empty? && @eof
 
-        @pending.slice!(0, limit)
+        @pending.slice!(0, limit) || +"".b
       end
 
       def pending? = !@pending.empty? || !@output.empty?
