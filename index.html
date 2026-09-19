@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#060a13">
+  <meta name="description" content="Tarazed is a pure Ruby terminal emulator core.">
+  <title>Tarazed — A terminal emulator core for Ruby</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body style="--accent:#7ed8a8">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="#"><span class="star-mark"></span>Tarazed</a>
+    <nav aria-label="Primary navigation"><a href="#features">Capabilities</a><a href="#install">Install</a><a href="https://github.com/noxdea/tarazed">GitHub</a></nav>
+  </header>
+  <main id="main">
+    <section class="hero">
+      <div>
+        <p class="constellation">γ Aquilae · terminal core</p>
+        <h1>Keep the terminal honest.</h1>
+        <p class="lede">A Unicode-aware cell grid, chunk-safe VT parser, input encoder, scrollback, and cross-platform PTY session in pure Ruby.</p>
+        <div class="actions"><a class="button primary" href="#install">Install Tarazed</a><a class="button" href="https://github.com/noxdea/tarazed">View source</a></div>
+        <ul class="facts"><li><strong>POSIX + ConPTY</strong></li><li>Ruby ≥ 3.1</li><li>MIT licensed</li></ul>
+      </div>
+      <div class="instrument" aria-label="Terminal emulator output example">
+        <div class="instrument-head"><span>terminal / 80 × 24</span><span class="signal">attached</span></div>
+        <div class="instrument-body">
+          <pre class="code"><span class="dim">Last login: Sat Sep 19 09:42:11</span>
+
+<span class="value">~</span> $ bundle exec rake test
+Run options: --seed 18420
+
+................................
+
+Finished in 0.412s, 77.67 runs/s
+32 runs, 186 assertions, 0 failures
+
+<span class="value">~</span> $ <span class="hit"> </span></pre>
+          <p class="command">scrollback 204 / 10,000 · cwd /workspace · exit 0</p>
+        </div>
+      </div>
+    </section>
+    <section class="features" id="features">
+      <div class="section-heading"><h2>The terminal, unbundled.</h2><p>Tarazed supplies the state and protocol core without choosing a renderer, editor model, or interface toolkit.</p></div>
+      <div class="feature-grid">
+        <article><h3>Faithful screen state</h3><p>Unicode-aware cells, bounded scrollback, selection, links, colors, and terminal modes.</p></article>
+        <article><h3>Chunk-safe parsing</h3><p>Feed arbitrary byte chunks; incomplete UTF-8 and control sequences wait for the next one.</p></article>
+        <article><h3>Real sessions</h3><p>Drive POSIX PTYs or 64-bit Windows ConPTY with input encoding and shell integration.</p></article>
+      </div>
+    </section>
+    <section class="install" id="install">
+      <div class="install-copy"><h2>Feed the grid.</h2><p>Use the parser by itself or let a PTY session connect it to a child process.</p></div>
+      <div class="terminal"><div class="terminal-bar">Ruby</div><pre><span class="prompt">$</span> bundle add tarazed
+
+screen = Tarazed::Grid.new(
+  columns: 80, rows: 24
+)
+terminal = Tarazed::VT.new(screen)
+terminal.feed("\e[32mready\e[0m\r\n")
+puts screen.text</pre></div>
+    </section>
+  </main>
+  <footer><p>Tarazed · Pure Ruby · MIT</p><div><a href="https://rubygems.org/gems/tarazed">RubyGems</a><a href="https://github.com/noxdea/tarazed">GitHub</a></div></footer>
+</body>
+</html>
