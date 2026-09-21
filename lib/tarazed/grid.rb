@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
+require "set"
 require "unicode/display_width"
 
 module Tarazed
   class Grid
-    attr_reader :columns, :rows, :cells, :scrollback, :cursor_x, :cursor_y, :scroll_top, :scroll_bottom
+    attr_reader :columns, :rows, :cells, :scrollback, :cursor_x, :cursor_y, :scroll_top, :scroll_bottom,
+      :synchronized
     attr_accessor :foreground, :background, :attributes, :hyperlink, :autowrap, :insert_mode, :origin_mode,
       :cursor_visible
 
@@ -25,8 +27,28 @@ module Tarazed
       @alternate = nil
       @scroll_top, @scroll_bottom = 0, rows - 1
       @cells = Array.new(rows) { blank_row }
+      @damage_rows = Set.new
+      @synchronized = false
+      mark_all_damage
       @tabs = (8...columns).step(8).to_a
       save_cursor
+    end
+
+    # Return the inclusive range of rows changed since the last clear.
+    # A renderer can rebuild only this range and then call #clear_damage.
+    def damage
+      return if @damage_rows.empty?
+
+      @damage_rows.min..@damage_rows.max
+    end
+
+    def damage_rows = @damage_rows.to_a.sort.freeze
+    def clear_damage = (@damage_rows.clear; self)
+    def mark_damage(row) = (@damage_rows.add(row) if row.between?(0, rows - 1); self)
+    def mark_all_damage = (@damage_rows.merge(0...rows); self)
+    def synchronized? = @synchronized
+    def synchronized=(value)
+      @synchronized = !!value
     end
 
     def [](row, column = nil) = column ? cells[row]&.[](column) : cells[row]
@@ -37,6 +59,7 @@ module Tarazed
     def wrap_pending? = @wrap_pending
 
     def put(char)
+      mark_damage(cursor_y)
       width = self.class.width(char)
       previous_x = @wrap_pending ? cursor_x : cursor_x - 1
       if previous_x >= 0 && !char.ascii_only?
@@ -113,6 +136,7 @@ module Tarazed
         @cursor_x = remainder.zero? ? columns - 1 : remainder
         @cursor_y = rows - 1
         @wrap_pending = remainder.zero?
+        mark_all_damage
       else
         text.each_byte { |byte| put(byte.chr) }
       end
@@ -125,6 +149,7 @@ module Tarazed
     end
 
     def move(x: cursor_x, y: cursor_y, relative: false)
+      previous_y = cursor_y
       if relative
         x += cursor_x
         y += cursor_y
@@ -133,6 +158,7 @@ module Tarazed
       @cursor_x = x.clamp(0, columns - 1)
       @cursor_y = y.clamp(top, bottom)
       @wrap_pending = false
+      mark_damage(previous_y).mark_damage(@cursor_y)
     end
 
     def position(row, column)
@@ -183,6 +209,7 @@ module Tarazed
         scrollback.push(removed) if scroll_top.zero? && scroll_bottom == rows - 1 && !alternate?
         cells.insert(scroll_bottom, blank_row)
       end
+      mark_all_damage
     end
 
     def scroll_down(count = 1)
@@ -190,6 +217,7 @@ module Tarazed
         cells.delete_at(scroll_bottom)
         cells.insert(scroll_top, blank_row)
       end
+      mark_all_damage
     end
 
     def erase_display(mode = 0)
@@ -203,6 +231,7 @@ module Tarazed
       when 2 then @cells = Array.new(rows) { blank_row }
       when 3 then scrollback.clear
       end
+      mark_all_damage
     end
 
     def erase_line(mode = 0)
@@ -216,6 +245,7 @@ module Tarazed
         clear_wide(cursor_y, column)
         cells[cursor_y][column] = blank
       end
+      mark_damage(cursor_y)
     end
 
     def erase_characters(count = 1)
@@ -223,6 +253,7 @@ module Tarazed
         clear_wide(cursor_y, column)
         cells[cursor_y][column] = blank
       end
+      mark_damage(cursor_y)
     end
 
     def insert_characters(count = 1)
@@ -230,6 +261,7 @@ module Tarazed
       cells[cursor_y].insert(cursor_x, *Array.new([count, columns - cursor_x].min) { blank })
       cells[cursor_y] = cells[cursor_y].first(columns)
       normalize_row(cursor_y)
+      mark_damage(cursor_y)
     end
 
     def delete_characters(count = 1)
@@ -238,6 +270,7 @@ module Tarazed
       cells[cursor_y].slice!(cursor_x, count)
       cells[cursor_y].concat(Array.new(count) { blank })
       normalize_row(cursor_y)
+      mark_damage(cursor_y)
     end
 
     def insert_lines(count = 1)
@@ -247,6 +280,7 @@ module Tarazed
         cells.delete_at(scroll_bottom)
         cells.insert(cursor_y, blank_row)
       end
+      mark_all_damage
     end
 
     def delete_lines(count = 1)
@@ -256,6 +290,7 @@ module Tarazed
         cells.delete_at(cursor_y)
         cells.insert(scroll_bottom, blank_row)
       end
+      mark_all_damage
     end
 
     def save_cursor
@@ -278,10 +313,12 @@ module Tarazed
         @cursor_x = @cursor_y = 0
         @scroll_top, @scroll_bottom = 0, rows - 1
         @wrap_pending = false
+        mark_all_damage
       elsif !enable && alternate?
         @cells, @alternate = @alternate, nil
         @scroll_top, @scroll_bottom = 0, rows - 1
         restore_cursor if save
+        mark_all_damage
       end
     end
 
@@ -307,6 +344,7 @@ module Tarazed
       @tabs = (@tabs.select { |column| column < columns } + added_tabs).uniq.sort
       @scroll_top, @scroll_bottom = 0, rows - 1
       move
+      mark_all_damage
     end
 
     # Coordinates are [column, row]; finish is exclusive, including scrollback
@@ -345,6 +383,11 @@ module Tarazed
         explicit << {url: found[0], column: column, end_column: column + found[0].length}
       end
       explicit.uniq
+    end
+
+    def search(query, regex: false, history: true, normalize: true)
+      source = history ? scrollback.to_a + cells : cells
+      scrollback.search(query, regex: regex, normalize: normalize, rows: source)
     end
 
     def file_paths(row, cwd: Dir.pwd)

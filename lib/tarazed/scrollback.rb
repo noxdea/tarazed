@@ -30,6 +30,25 @@ module Tarazed
       @rows << row.freeze
     end
 
+    def search(query, regex: false, normalize: true, rows: @rows)
+      matcher = regex ? Regexp.new(query.to_s) : query.to_s
+      rows.each_with_index.filter_map do |cells, index|
+        text = cells.map(&:text).join.rstrip
+        comparable = normalize && text.respond_to?(:unicode_normalize) ? text.unicode_normalize(:nfc) : text
+        match = regex ? matcher.match(comparable) : comparable.index(matcher)
+        next unless match
+
+        range = if match.is_a?(MatchData)
+          match.begin(0)...match.end(0)
+        else
+          match...(match + matcher.length)
+        end
+        {index: index, text: text, range: range}.freeze
+      end.freeze
+    rescue RegexpError => error
+      raise ArgumentError, "invalid search pattern: #{error.message}"
+    end
+
     def advance(count) = @total += count
   end
 end

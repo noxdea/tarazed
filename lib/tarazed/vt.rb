@@ -92,6 +92,14 @@ module Tarazed
       modes[2004] ? "\e[200~#{text.gsub("\e[201~", "")}\e[201~" : text
     end
 
+    def synchronized? = !!modes[2026]
+
+    def focus(active:)
+      return "" unless modes[1004]
+
+      active ? "\e[I" : "\e[O"
+    end
+
     def mouse(button:, column:, row:, action: :press, shift: false, alt: false, control: false)
       tracking = [1000, 1002, 1003].find { |mode| modes[mode] }
       return "" unless tracking
@@ -355,6 +363,10 @@ module Tarazed
         when 1049 then grid.alternate(enabled)
         when 1000, 1002, 1003
           [1000, 1002, 1003].each { |other| @modes[other] = false unless other == mode } if enabled
+        when 1004
+          # Focus reporting is emitted by #focus when the host window changes.
+        when 2026
+          grid.synchronized = enabled
         end
       elsif mode == 4
         grid.insert_mode = enabled
