@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.6 - 2026-09-21
+
+- Add terminal damage tracking, synchronized-output state, focus notifications, and scrollback search.
+
 ## 0.2.5 - 2026-09-19
 
 - Keep open Windows ConPTY reads non-EOF while waiting for output.
