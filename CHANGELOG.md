@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.2.7 - 2026-09-21
+
+- Fix trusted RubyGems publishing for the terminal core.
+
 ## 0.2.6 - 2026-09-21
 
 - Add terminal damage tracking, synchronized-output state, focus notifications, and scrollback search.
