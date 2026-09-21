@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## 0.2.7 - 2026-09-21
 
 - Fix trusted RubyGems publishing for the terminal core.
